@@ -14,14 +14,14 @@ CTrade trade;
 
 //--- Input Parameters
 sinput string   Section1 = "--- Neural Network Weights (Optimize These) ---"; 
-input double    InpWeight1 = 0.5;    // Opt: Weight 1 (RSI) [-1 to 1]
-input double    InpWeight2 = -0.3;   // Opt: Weight 2 (WPR) [-1 to 1]
-input double    InpWeight3 = 0.8;    // Opt: Weight 3 (DeMarker) [-1 to 1]
-input double    InpWeight4 = 0.2;    // Opt: Weight 4 (Stochastic) [-1 to 1]
+input double    InpWeight1 = -0.8;   // Opt: Weight 1 (RSI) [-1 to 1]
+input double    InpWeight2 = 0.4;    // Opt: Weight 2 (WPR) [-1 to 1]
+input double    InpWeight3 = -0.6;   // Opt: Weight 3 (DeMarker) [-1 to 1]
+input double    InpWeight4 = -0.3;   // Opt: Weight 4 (Stochastic) [-1 to 1]
 
 sinput string   Section2 = "--- Neural Network Thresholds ---"; 
-input double    InpBuyThreshold = 0.6;   // Opt: Buy Threshold (0 to 1)
-input double    InpSellThreshold = -0.6; // Opt: Sell Threshold (-1 to 0)
+input double    InpBuyThreshold = 0.50;  // Opt: Buy Threshold (0 to 1)
+input double    InpSellThreshold = -0.65; // Opt: Sell Threshold (-1 to 0)
 
 sinput string   Section3 = "--- Risk parameters ---";
 input double    InpLotSize = 0.1;           // Fixed Lot Size (if Risk = 0)
@@ -146,7 +146,7 @@ double GetPerceptronActivation(int index)
 //+------------------------------------------------------------------+
 void ManageRisk()
 {
-   if(!PositionSelectEx(_Symbol)) return;
+   if(!PositionSelect(_Symbol)) return;
    
    double pos_open = PositionGetDouble(POSITION_PRICE_OPEN);
    double pos_sl = PositionGetDouble(POSITION_SL);

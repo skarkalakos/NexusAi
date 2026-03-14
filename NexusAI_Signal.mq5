@@ -27,14 +27,14 @@
 
 //--- Input Parameters for the Neural Network
 sinput string   Section1 = "--- Neural Network Weights ---"; // Network Weights (Genetic Optimization)
-input double    InpWeight1 = 0.5;    // Weight 1 (RSI)
-input double    InpWeight2 = -0.3;   // Weight 2 (WPR)
-input double    InpWeight3 = 0.8;    // Weight 3 (DeMarker)
-input double    InpWeight4 = 0.2;    // Weight 4 (Stochastic)
+input double    InpWeight1 = -0.8;   // Weight 1 (RSI)
+input double    InpWeight2 = 0.4;    // Weight 2 (WPR)
+input double    InpWeight3 = -0.6;   // Weight 3 (DeMarker)
+input double    InpWeight4 = -0.3;   // Weight 4 (Stochastic)
 
 sinput string   Section2 = "--- Neural Network Thresholds ---"; 
-input double    InpBuyThreshold = 0.6;   // Buy Activation Threshold (0 to 1)
-input double    InpSellThreshold = -0.6; // Sell Activation Threshold (-1 to 0)
+input double    InpBuyThreshold = 0.50;   // Buy Activation Threshold (0 to 1)
+input double    InpSellThreshold = -0.65; // Sell Activation Threshold (-1 to 0)
 
 sinput string   Section3 = "--- Oscillator Periods ---";
 input int       InpPeriodRSI = 14;   // RSI Period
