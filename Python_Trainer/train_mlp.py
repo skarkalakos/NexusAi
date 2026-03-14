@@ -34,19 +34,31 @@ def generate_dummy_data(samples=10000):
     
     return pd.DataFrame(X), pd.Series(y)
 
+import os
+
+# ... (architecture defines)
+
 def train_and_export():
     print("NexusAI: Starting Neural Network Training...")
     
-    # In production, replace `generate_dummy_data()` with `pd.read_csv('mt5_export.csv')`
-    X, y = generate_dummy_data()
+    csv_path = r"C:\Users\skark\AppData\Roaming\MetaQuotes\Terminal\Common\Files\NexusAI_Export_EURUSD.csv"
     
-    # We already Z-Score normalize in MQL5, but we do it here too just to ensure 
-    # the MLP trains on strict [-1, 1] bounded variants if needed.
-    # Actually, Scikit-learn handles its own scaling, but we'll stick to our MQL5 logic.
+    if os.path.exists(csv_path):
+        print(f"Loading real market data from: {csv_path}")
+        df = pd.read_csv(csv_path)
+        X = df.drop(columns=['Target']).values
+        y = df['Target'].values
+        # Ensure we only take the last ROLLING_WINDOW if we want, or use everything.
+        print(f"Dataset Size: {len(df)} samples.")
+    else:
+        print("Real data CSV not found. Running with mock data for pipeline verification...")
+        X, y = generate_dummy_data()
+        X = X.values
+        y = y.values
+    
+    # Even if Z-Score normalized in MQL5, we scale here to ensure the training batch is stable.
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
-    
-    # We use tanh to match the MQL5 activation function exactly!
     X_tanh = np.tanh(X_scaled)
     
     X_train, X_test, y_train, y_test = train_test_split(X_tanh, y, test_size=0.2, random_state=42)
@@ -54,9 +66,9 @@ def train_and_export():
     # Building the exact architecture as our MQL5 EA
     mlp = MLPClassifier(
         hidden_layer_sizes=(NUM_HIDDEN_1, NUM_HIDDEN_2),
-        activation='tanh', # CRITICAL: Matches MQL5 MathTanh()
+        activation='tanh', 
         solver='adam',
-        max_iter=1000,
+        max_iter=2000, # Increased for real data
         random_state=42
     )
     

@@ -45,6 +45,7 @@ input int       InpBreakEven = 100;         // Break Even Trigger (Points)
 input int       InpBreakEvenLock = 10;      // Break Even Lock Profit (Points)
 
 sinput string   Section4 = "--- Feature Engineering Settings ---";
+input bool      InpExportData = false; // Enable Data Export for AI Training
 input int       InpPeriodATR = 14;     // ATR Period
 input int       InpPeriodMACD_Fast = 12; // MACD Fast
 input int       InpPeriodMACD_Slow = 26; // MACD Slow
@@ -253,6 +254,53 @@ int OnInit()
 
    return(INIT_SUCCEEDED);
   }
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   IndicatorRelease(handle_atr);
+   IndicatorRelease(handle_macd);
+   IndicatorRelease(handle_rsi);
+   IndicatorRelease(handle_bb);
+}
+
+//+------------------------------------------------------------------+
+//| Export Features to CSV (for Python Deep Learning)                |
+//+------------------------------------------------------------------+
+void ExportDataRow(double &inputs[], int target)
+{
+   if(!InpExportData) return;
+   
+   string filename = "NexusAI_Export_" + _Symbol + ".csv";
+   int file_handle = FileOpen(filename, FILE_WRITE|FILE_READ|FILE_CSV|FILE_ANSI|FILE_COMMON, ",");
+   
+   if(file_handle != INVALID_HANDLE)
+   {
+      FileSeek(file_handle, 0, SEEK_END);
+      
+      // If file is empty, write header
+      if(FileSize(file_handle) == 0)
+      {
+         FileWrite(file_handle, "F0,F1,F2,F3,F4,F5,F6,F7,Target");
+      }
+      
+      FileWrite(file_handle, 
+         DoubleToString(inputs[0], 5),
+         DoubleToString(inputs[1], 5),
+         DoubleToString(inputs[2], 5),
+         DoubleToString(inputs[3], 5),
+         DoubleToString(inputs[4], 5),
+         DoubleToString(inputs[5], 5),
+         DoubleToString(inputs[6], 5),
+         DoubleToString(inputs[7], 5),
+         (string)target
+      );
+      
+      FileClose(file_handle);
+   }
+}
   
 //+------------------------------------------------------------------+
 //| MLP Feed Forward Pass                                            |
@@ -338,8 +386,57 @@ double GetDeepActivation(int index)
     for(int i=0; i<ROLLING_WINDOW-1; i++) atr_diff[i] = atr[i] - atr[i+1];
     atr_diff[ROLLING_WINDOW-1] = atr_diff[ROLLING_WINDOW-2]; // padding last val
     inputs[7] = ZScoreNormalize(atr_diff[0], 7, atr_diff);
+    
+    // Cache for export
+    // ...
       
     return FeedForward(inputs);
+}
+
+// Global variable to share features with OnTick for export
+double inputs_debug[8];
+
+// Modified GetDeepActivation to also populate debug buffer
+double GetDeepActivationExport(int index, double &out_inputs[])
+{
+    double atr[], macd_main[], macd_sig[], rsi[], bb_up[], bb_dn[], close[];
+    if(CopyBuffer(handle_atr, 0, index, ROLLING_WINDOW, atr) <= 0) return 0;
+    if(CopyBuffer(handle_macd, 0, index, ROLLING_WINDOW, macd_main) <= 0) return 0;
+    if(CopyBuffer(handle_macd, 1, index, ROLLING_WINDOW, macd_sig) <= 0) return 0;
+    if(CopyBuffer(handle_rsi, 0, index, ROLLING_WINDOW, rsi) <= 0) return 0;
+    if(CopyBuffer(handle_bb, 1, index, ROLLING_WINDOW, bb_up) <= 0) return 0;
+    if(CopyBuffer(handle_bb, 2, index, ROLLING_WINDOW, bb_dn) <= 0) return 0;
+    if(CopyClose(_Symbol, _Period, index, ROLLING_WINDOW, close) <= 0) return 0;
+    
+    out_inputs[0] = ZScoreNormalize(atr[0], 0, atr);
+    
+    double hist[]; ArrayResize(hist, ROLLING_WINDOW);
+    for(int i=0; i<ROLLING_WINDOW; i++) hist[i] = macd_main[i] - macd_sig[i];
+    out_inputs[1] = ZScoreNormalize(hist[0], 1, hist);
+    
+    out_inputs[2] = ZScoreNormalize(rsi[0], 2, rsi);
+    
+    double dist_up[]; ArrayResize(dist_up, ROLLING_WINDOW);
+    for(int i=0; i<ROLLING_WINDOW; i++) dist_up[i] = bb_up[i] - close[i];
+    out_inputs[3] = ZScoreNormalize(dist_up[0], 3, dist_up);
+    
+    double dist_dn[]; ArrayResize(dist_dn, ROLLING_WINDOW);
+    for(int i=0; i<ROLLING_WINDOW; i++) dist_dn[i] = close[i] - bb_dn[i];
+    out_inputs[4] = ZScoreNormalize(dist_dn[0], 4, dist_dn);
+    
+    double mom[]; ArrayResize(mom, ROLLING_WINDOW);
+    for(int i=0; i<ROLLING_WINDOW-1; i++) mom[i] = close[i] - close[i+1];
+    mom[ROLLING_WINDOW-1] = mom[ROLLING_WINDOW-2];
+    out_inputs[5] = ZScoreNormalize(mom[0], 5, mom);
+    
+    out_inputs[6] = ZScoreNormalize(macd_main[0], 6, macd_main);
+    
+    double atr_diff[]; ArrayResize(atr_diff, ROLLING_WINDOW);
+    for(int i=0; i<ROLLING_WINDOW-1; i++) atr_diff[i] = atr[i] - atr[i+1];
+    atr_diff[ROLLING_WINDOW-1] = atr_diff[ROLLING_WINDOW-2];
+    out_inputs[7] = ZScoreNormalize(atr_diff[0], 7, atr_diff);
+      
+    return FeedForward(out_inputs);
 }
 
 //+------------------------------------------------------------------+
@@ -430,13 +527,25 @@ void OnTick()
    if(positions > 0) return; // Wait until position closes
    
    // 1 = Previous Completed Bar. 2 = Bar before that. (Never process unfinished Index 0)
-   double activation = GetDeepActivation(1);
+   double current_inputs[8];
+   double activation = GetDeepActivationExport(1, current_inputs);
    double prev_activation = GetDeepActivation(2);
    
    double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    
    double lot = CalculateLotSize(InpStopLoss);
+   
+   // --- Data Export Logic (Targeting the next candle's direction) ---
+   if(InpExportData)
+   {
+      double close_curr = iClose(_Symbol, _Period, 1);
+      double close_next = iClose(_Symbol, _Period, 0); // Bar 0 is the one just starting
+      
+      // Target: 1 if Price went up on the completed bar, 0 if down.
+      int target = (close_next > close_curr) ? 1 : 0;
+      ExportDataRow(current_inputs, target);
+   }
    
    // Buy condition: Crossed the BuyThreshold upwards
    if(activation > InpBuyThreshold && prev_activation <= InpBuyThreshold)
